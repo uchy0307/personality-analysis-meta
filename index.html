@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#8a6030" />
-    <meta name="description" content="198本のappの履歴を横断して人格プロファイルを生成するメタアプリ" />
+    <meta name="description" content="200本のappの履歴を横断して人格プロファイルを生成するメタアプリ" />
 
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" href="/favicon.png" />
@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-title" content="人格分析" />
 
     <meta property="og:title" content="200の問い 人格分析" />
-    <meta property="og:description" content="198本のappの履歴を横断して人格プロファイルを生成" />
+    <meta property="og:description" content="200本のappの履歴を横断して人格プロファイルを生成" />
     <meta property="og:type" content="website" />
 
     <title>200の問い 人格分析｜メタアプリ #000</title>
@@ -22,6 +22,33 @@
       html, body { background: #f0ede8; margin: 0; padding: 0; }
       #root { background: #f0ede8; min-height: 100vh; }
     </style>
+      <script>
+      // ?_export=1 でアクセスされた時、自身のlocalStorage履歴を親windowに送信
+      (function() {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get("_export") !== "1") return;
+          if (window.parent === window) return; // 親が無い場合は無視
+          var historyKey = null;
+          var data = null;
+          for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && /^app\d{2,3}_history_v1$/.test(key)) {
+              historyKey = key;
+              try { data = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
+              break;
+            }
+          }
+          var match = (historyKey || "").match(/^app(\d{2,3})/);
+          var appId = match ? match[1] : "";
+          window.parent.postMessage({
+            type: "TOI_EXPORT",
+            payload: { appId: appId, history: Array.isArray(data) ? data : [] }
+          }, "*");
+        } catch (e) {}
+      })();
+    </script>
+
   </head>
   <body>
     <div id="root"></div>

@@ -193,7 +193,7 @@ const loadProfiles = () => { try { return JSON.parse(localStorage.getItem(HISTOR
 const saveProfiles = (h) => { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-10))); } catch {} };
 
 // ───────────────────────────────────────────────────────────
-// localStorageから全appデータをスキャン
+// localStorageから全appデータをスキャン (同origin用 - 主に開発・PWA時)
 // ───────────────────────────────────────────────────────────
 function scanAppData() {
   const apps = [];
@@ -217,11 +217,90 @@ function scanAppData() {
             name: meta[0],
             emoji: meta[1],
             category: meta[2],
+            source: "local",
           });
         }
       } catch (e) {}
     }
   } catch (e) {}
+  return apps.sort((a, b) => parseInt(a.rawId) - parseInt(b.rawId));
+}
+
+// ───────────────────────────────────────────────────────────
+// クロスドメインiframe方式: 全toi-XXX.vercel.appをiframe読み込み + postMessage受信
+// 各appは ?_export=1 アクセス時に history データを postMessage する仕組み
+// ───────────────────────────────────────────────────────────
+function getKnownAppIds() {
+  const ids = new Set(Object.keys(APP_META));
+  // 121-200 fallback range も追加 (APP_METAに無いが存在するので)
+  for (let i = 121; i <= 200; i++) ids.add(String(i).padStart(3, "0"));
+  return Array.from(ids).sort((a, b) => parseInt(a) - parseInt(b));
+}
+
+async function fetchAppHistoryViaIframe(appId, timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;border:0;";
+    const url = `https://toi-${appId}.vercel.app/?_export=1`;
+    iframe.src = url;
+
+    const timer = setTimeout(() => {
+      window.removeEventListener("message", handler);
+      iframe.remove();
+      resolve(null);
+    }, timeoutMs);
+
+    function handler(e) {
+      if (!e.data || e.data.type !== "TOI_EXPORT") return;
+      // Verify origin
+      try {
+        const expectedOrigin = `https://toi-${appId}.vercel.app`;
+        if (e.origin !== expectedOrigin) return;
+      } catch (err) {}
+      clearTimeout(timer);
+      window.removeEventListener("message", handler);
+      iframe.remove();
+      resolve(e.data.payload || null);
+    }
+    window.addEventListener("message", handler);
+
+    document.body.appendChild(iframe);
+  });
+}
+
+async function scanCrossDomain(onProgress) {
+  const ids = getKnownAppIds();
+  const apps = [];
+  // Concurrency limit (大量iframe同時生成を避ける)
+  const CONCURRENCY = 8;
+  let cursor = 0;
+  let processed = 0;
+  async function worker() {
+    while (cursor < ids.length) {
+      const id = ids[cursor++];
+      const payload = await fetchAppHistoryViaIframe(id);
+      processed++;
+      if (onProgress) onProgress(processed, ids.length, id, !!payload);
+      if (!payload) continue;
+      // payload should be { history: [...], appId: "XXX" }
+      const data = Array.isArray(payload.history) ? payload.history : [];
+      if (data.length === 0) continue;
+      const meta = APP_META[id] || APP_META[id.replace(/^0+/, "") || "0"] || APP_META_FALLBACK(id);
+      apps.push({
+        rawId: id,
+        paddedId: id.padStart(3, "0"),
+        key: `app${id}_history_v1`,
+        count: data.length,
+        data,
+        name: meta[0],
+        emoji: meta[1],
+        category: meta[2],
+        source: "iframe",
+      });
+    }
+  }
+  const workers = Array.from({ length: CONCURRENCY }, () => worker());
+  await Promise.all(workers);
   return apps.sort((a, b) => parseInt(a.rawId) - parseInt(b.rawId));
 }
 
@@ -595,11 +674,37 @@ export default function App() {
   const [profiles, setProfiles] = useState(loadProfiles());
   const [shareImageUrl, setShareImageUrl] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [crossScanning, setCrossScanning] = useState(false);
+  const [crossProgress, setCrossProgress] = useState({ done: 0, total: 0, current: "" });
 
   useEffect(() => {
     const apps = scanAppData();
     setScannedApps(apps);
   }, []);
+
+  const runCrossDomainScan = async () => {
+    T("tap");
+    setCrossScanning(true);
+    setCrossProgress({ done: 0, total: 0, current: "scanning..." });
+    try {
+      const apps = await scanCrossDomain((done, total, id, found) => {
+        setCrossProgress({ done, total, current: `app${id} ${found ? "✓" : "·"}` });
+      });
+      // Merge with existing local scan (de-duplicate by rawId)
+      const merged = [...scannedApps];
+      const existingIds = new Set(merged.map(a => a.rawId));
+      for (const a of apps) {
+        if (!existingIds.has(a.rawId)) merged.push(a);
+      }
+      merged.sort((a, b) => parseInt(a.rawId) - parseInt(b.rawId));
+      setScannedApps(merged);
+      T("success");
+    } catch (e) {
+      alert("スキャンエラー: " + e.message);
+    } finally {
+      setCrossScanning(false);
+    }
+  };
 
   const totalSessions = useMemo(() =>
     scannedApps.reduce((s, a) => s + a.count, 0) + manualEntries.length,
@@ -681,7 +786,7 @@ export default function App() {
           <div style={{ width: 44, height: 44, borderRadius: "50%", background: `linear-gradient(135deg,${C.gold},${C.goldDim})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#fff" }}>🧬</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.gold }}>200の問い 人格分析</div>
-            <div style={{ fontSize: 10, color: C.textMuted }}>198本のapp実績から横断的にあなたの人格を可視化</div>
+            <div style={{ fontSize: 10, color: C.textMuted }}>200本のapp実績から横断的にあなたの人格を可視化</div>
           </div>
           <button onClick={toggleTap} style={{ padding: "4px 8px", background: tapOn ? C.goldBg : C.surface2, border: `1px solid ${tapOn ? C.borderActive : C.border}`, borderRadius: 7, fontSize: 10, color: tapOn ? C.gold : C.textMuted }}>{tapOn ? "🔔" : "🔕"}</button>
           <button onClick={() => toggleSpeak(profile?.summary || "")} style={{ padding: "4px 8px", background: isSpeaking ? C.goldBg : C.surface2, border: `1px solid ${isSpeaking ? C.borderActive : C.border}`, borderRadius: 7, fontSize: 10, color: isSpeaking ? C.gold : C.textSub }}>{isSpeaking ? "⏹" : "🔈"}</button>
@@ -695,7 +800,7 @@ export default function App() {
             <div style={{ fontSize: 48, marginBottom: 12 }}>🧬</div>
             <div style={{ fontSize: 18, fontWeight: 800, color: C.gold, marginBottom: 8 }}>200の問い 人格分析</div>
             <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.8 }}>
-              他の198本のappで蓄積した分析履歴を横断して、<br />あなたの「人格プロファイル」を生成します。
+              他の200本のappで蓄積した分析履歴を横断して、<br />あなたの「人格プロファイル」を生成します。
             </div>
           </div>
 
@@ -706,11 +811,23 @@ export default function App() {
 
           <div style={{ background: C.surface, border: `1.5px solid ${C.borderActive}`, borderRadius: 14, padding: 16, marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, marginBottom: 10 }}>📡 検出されたapp履歴</div>
+
+            {/* クロスドメインスキャンボタン */}
+            <button
+              onClick={runCrossDomainScan}
+              disabled={crossScanning}
+              style={{ width: "100%", padding: "10px 0", marginBottom: 10, background: crossScanning ? C.surface3 : `linear-gradient(135deg,${C.blue},#0a3a5a)`, border: "none", borderRadius: 10, color: crossScanning ? C.textMuted : "#fff", fontSize: 12, fontWeight: 700 }}
+            >
+              {crossScanning ? `🌐 スキャン中 ${crossProgress.done}/${crossProgress.total} ${crossProgress.current}` : "🌐 全app自動スキャン (toi-XXX を巡回)"}
+            </button>
+            <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 10, lineHeight: 1.6 }}>
+              ☝️ 全200本のappを iframe で巡回して、それぞれのlocalStorage履歴を取得します。1〜2分かかります。
+            </div>
+
             {scannedApps.length === 0 ? (
               <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.7, padding: "8px 0" }}>
                 まだ検出されていません。<br />
-                ・このブラウザの同じドメイン下で他のapp(003〜200)を一度でも実施していれば自動検出されます。<br />
-                ・または「手動で結果を入れる」を使って過去のAI分析結果を貼り付けてください。
+                上の「全app自動スキャン」ボタンか、「手動で結果を入れる」をご利用ください。
               </div>
             ) : (
               <>
