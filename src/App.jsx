@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 
 // ───────────────────────────────────────────────────────────
 // 200の問い 人格分析 (app000) - δ方式 メタアプリ v1.0
-// 198本のappのlocalStorageを横断して人格プロファイルを生成
+// 200本のappのlocalStorageを横断して人格プロファイルを生成
 // ───────────────────────────────────────────────────────────
 
 window._tapOn = typeof window._tapOn !== "undefined" ? window._tapOn : true;
@@ -58,7 +58,7 @@ const C = {
 };
 
 // ───────────────────────────────────────────────────────────
-// APP_META: 198アプリの番号→[名前, 絵文字, カテゴリ]マップ
+// APP_META: 200アプリの番号→[名前, 絵文字, カテゴリ]マップ
 // localStorageのキーはapp03〜app20: 2桁、app021〜app200: 3桁形式
 // ───────────────────────────────────────────────────────────
 const APP_META = {
@@ -689,7 +689,9 @@ export default function App() {
   const runCrossDomainScan = async () => {
     T("tap");
     setCrossScanning(true);
-    setCrossProgress({ done: 0, total: 0, current: "scanning..." });
+    // 開始時は 0/200 を即表示
+    const initialTotal = getKnownAppIds().length;
+    setCrossProgress({ done: 0, total: initialTotal, current: "" });
     try {
       const apps = await scanCrossDomain((done, total, id, found) => {
         setCrossProgress({ done, total, current: `app${id} ${found ? "✓" : "·"}` });
@@ -920,79 +922,4 @@ export default function App() {
             </button>
           </div>
 
-          <button onClick={reset} style={{ width: "100%", padding: "10px 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.textSub, fontSize: 12 }}>← ホームへ戻る</button>
-        </div>
-      )}
-
-      {/* PROFILE */}
-      {screen === "profile" && profile && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 40px" }}>
-          <div style={{ textAlign: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 36 }}>🧬</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: C.gold }}>あなたの人格プロファイル</div>
-            <div style={{ fontSize: 10, color: C.textMuted }}>{scannedApps.length + manualEntries.length}本のapp / {totalSessions}セッションから生成</div>
-          </div>
-
-          {Object.keys(profile.values || {}).length >= 3 && (
-            <div style={{ background: C.surface, border: `1px solid ${C.borderActive}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, marginBottom: 10 }}>🌟 価値観の軸</div>
-              <RadarChart scores={profile.values} />
-            </div>
-          )}
-
-          <ProfileCard icon="🧠" title="思考傾向" body={profile.thinking} color={C.blue} />
-          <ProfileCard icon="❤️" title="感情パターン" body={profile.emotion} color={C.red} />
-          <ProfileCard icon="🎯" title="行動傾向" body={profile.action} color={C.green} />
-          <ProfileCard icon="💎" title="強み と 伸ばしどころ" body={profile.strengths} color={C.gold} />
-          <ProfileCard icon="🌅" title="人生フェーズの傾向" body={profile.phase} color={C.purple} />
-          <ProfileCard icon="🚀" title="おすすめ次アプリ" body={profile.recommend} color={C.gold} />
-          <ProfileCard icon="📝" title="全体総評" body={profile.summary} color={C.goldDim} />
-
-          {/* シェア画像生成 */}
-          <div style={{ background: C.surface, border: `1.5px solid ${C.borderActive}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, marginBottom: 8 }}>📤 シェア画像を作る</div>
-            <button onClick={generateShare} disabled={generating} style={{ width: "100%", padding: "10px 0", background: generating ? C.surface3 : C.gold, border: "none", borderRadius: 10, color: generating ? C.textMuted : "#fff", fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-              {generating ? "生成中..." : (shareImageUrl ? "🔄 再生成" : "📸 PNG画像を生成")}
-            </button>
-            {shareImageUrl && (
-              <>
-                <img src={shareImageUrl} alt="プロファイル" style={{ width: "100%", borderRadius: 8, border: `1px solid ${C.border}`, marginBottom: 8 }} />
-                <button onClick={downloadShare} style={{ width: "100%", padding: "10px 0", background: C.green, border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 700 }}>
-                  💾 ダウンロード
-                </button>
-              </>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={() => setScreen("prompt")} style={{ flex: 1, padding: "10px 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.textSub, fontSize: 11 }}>← プロンプトへ</button>
-            <button onClick={reset} style={{ flex: 1, padding: "10px 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.textSub, fontSize: 11 }}>🏠 ホーム</button>
-          </div>
-        </div>
-      )}
-
-      {/* HISTORY */}
-      {screen === "history" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "18px 18px 40px" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, marginBottom: 12 }}>📊 過去のプロファイル</div>
-          {profiles.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 30, color: C.textMuted, fontSize: 12 }}>まだ履歴がありません</div>
-          ) : (
-            profiles.map((p, i) => (
-              <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{p.date} {p.time}</div>
-                  <div style={{ fontSize: 10, color: C.textMuted }}>{p.totalApps}本 / {p.totalSessions}セッション</div>
-                </div>
-                <div style={{ fontSize: 11, color: C.textSub, lineHeight: 1.7 }}>
-                  {(p.profile.summary || p.profile.raw || "").slice(0, 120)}...
-                </div>
-              </div>
-            ))
-          )}
-          <button onClick={reset} style={{ width: "100%", padding: "12px 0", marginTop: 10, background: `linear-gradient(135deg,${C.gold},${C.goldDim})`, border: "none", borderRadius: 12, color: "#fff", fontSize: 13, fontWeight: 700 }}>🏠 ホーム</button>
-        </div>
-      )}
-    </div>
-  );
-}
+          <button onClick={reset} style={{ width: "100%", padding: "10px 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.textSub, fon

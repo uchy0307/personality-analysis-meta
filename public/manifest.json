@@ -1,7 +1,7 @@
 {
   "name": "200の問い 人格分析",
   "short_name": "人格分析",
-  "description": "198本のappを横断して人格プロファイルを生成するメタアプリ",
+  "description": "200本のappを横断して人格プロファイルを生成するメタアプリ",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f0ede8",
