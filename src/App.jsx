@@ -62,6 +62,10 @@ const C = {
 // localStorageのキーはapp03〜app20: 2桁、app021〜app200: 3桁形式
 // ───────────────────────────────────────────────────────────
 const APP_META = {
+  "01": ["1on1マスターAI", "🧭", "自己理解"],
+  "02": ["価値観発掘コンサル", "⚖️", "自己理解"],
+  "001": ["1on1マスターAI", "🧭", "自己理解"],
+  "002": ["価値観発掘コンサル", "⚖️", "自己理解"],
   "03": ["強み言語化パートナー", "💪", "自己理解"],
   "04": ["メンタル・デトックス", "🌫️", "自己理解"],
   "05": ["ライフミッション作成", "🔥", "自己理解"],
@@ -231,9 +235,9 @@ function scanAppData() {
 // 各appは ?_export=1 アクセス時に history データを postMessage する仕組み
 // ───────────────────────────────────────────────────────────
 function getKnownAppIds() {
-  const ids = new Set(Object.keys(APP_META));
-  // 121-200 fallback range も追加 (APP_METAに無いが存在するので)
-  for (let i = 121; i <= 200; i++) ids.add(String(i).padStart(3, "0"));
+  // 全200本(001-200)を3桁形式で生成
+  const ids = new Set();
+  for (let i = 1; i <= 200; i++) ids.add(String(i).padStart(3, "0"));
   return Array.from(ids).sort((a, b) => parseInt(a) - parseInt(b));
 }
 
